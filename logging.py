@@ -1,4 +1,4 @@
-```python
+python
 import logging
 import sys
 import os
@@ -32,4 +32,3 @@ def setup_logging():
 
     logging.info("Логгер успешно сконфигурирован")
     logging.info("Приложение запущено")
-```

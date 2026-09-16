@@ -1,9 +1,8 @@
-```python
 import logging
 import re
 import hashlib
 
-from logging_config import setup_logging
+from logging import setup_logging
 
 
 # ============================================================
@@ -398,4 +397,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-```
