@@ -1,399 +1,202 @@
 import logging
-import re
-import hashlib
+import math
+import os
+import sys
+from typing import List, Tuple
 
-from logging import setup_logging
-
-
-# ============================================================
-# НАСТРОЙКА
-# ============================================================
-
-# Предустановленный чёрный список логинов
-BLACKLIST = {
-    "admin",
-    "administrator",
-    "root",
-    "user",
-    "test",
-    "guest",
-    "support"
-}
+LOG_DIR = "Logs"
+LOG_FILE = os.path.join(LOG_DIR, "app.log")
 
 
-# ============================================================
-# МАСКИРОВАНИЕ ПАРОЛЯ
-# ============================================================
+def setup_logging() -> None:
+    """Настройка сквозного логирования: консоль + файл."""
+    os.makedirs(LOG_DIR, exist_ok=True)
 
-def mask_password(password):
-    """
-    Безопасное маскирование пароля.
+    log_format = "%(asctime)s | [%(levelname)-7s] | %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
 
-    Одинаковые пароли дают одинаковый результат.
-    Разные пароли дают разные результаты.
-
-    Сам пароль в лог никогда не записывается.
-    """
-
-    # Используем SHA-256 только для получения
-    # одинакового идентификатора для одинаковых паролей.
-    password_hash = hashlib.sha256(
-        password.encode("utf-8")
-    ).hexdigest()
-
-    # В лог записывается только часть хеша.
-    return password_hash[:12]
-
-
-# ============================================================
-# ПРОВЕРКА ЛОГИНА
-# ============================================================
-
-def validate_login(login):
-    """
-    Проверяет логин.
-
-    Возможные варианты:
-    1. Телефон
-    2. Email
-    3. Обычный логин
-
-    Возвращает:
-        (True, "")       - если логин корректный
-        (False, причина) - если обнаружена ошибка
-    """
-
-    if not login:
-        return False, "Логин не может быть пустым"
-
-    # Проверка на чёрный список
-    if login.lower() in BLACKLIST:
-        return False, "Логин находится в черном списке"
-
-    # --------------------------------------------------------
-    # Проверка телефона
-    # Формат:
-    # +x-xxx-xxx-xxxx
-    # --------------------------------------------------------
-
-    phone_pattern = r"^\+\d-\d{3}-\d{3}-\d{4}$"
-
-    if login.startswith("+"):
-        if re.fullmatch(phone_pattern, login):
-            return True, ""
-
-        return False, "Неверный формат номера телефона"
-
-    # --------------------------------------------------------
-    # Проверка email
-    # --------------------------------------------------------
-
-    email_pattern = (
-        r"^[A-Za-z0-9._%+-]+"
-        r"@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format=log_format,
+        datefmt=date_format,
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(LOG_FILE, encoding="utf-8")
+        ]
     )
 
-    if "@" in login:
-        if re.fullmatch(email_pattern, login):
-            return True, ""
-
-        return False, "Неверный формат email"
-
-    # --------------------------------------------------------
-    # Проверка обычного логина
-    # --------------------------------------------------------
-
-    if len(login) < 5:
-        return False, "Логин должен содержать минимум 5 символов"
-
-    username_pattern = r"^[A-Za-z0-9_]+$"
-
-    if not re.fullmatch(username_pattern, login):
-        return (
-            False,
-            "Обычный логин может содержать только "
-            "латинские буквы, цифры и знак подчеркивания"
-        )
-
-    return True, ""
+    # INFO — штатное событие запуска.
+    logging.info("Логгер успешно сконфигурирован")
+    logging.info("Приложение запущено")
 
 
-# ============================================================
-# ПРОВЕРКА ПАРОЛЯ
-# ============================================================
-
-def validate_password(password):
-    """
-    Проверяет пароль согласно требованиям задания.
-
-    Требования:
-    - минимум 7 символов;
-    - кириллица;
-    - цифры;
-    - специальные символы;
-    - минимум одна заглавная буква;
-    - минимум одна строчная буква;
-    - минимум одна цифра;
-    - минимум один спецсимвол.
-    """
-
-    if not password:
-        return False, "Пароль не может быть пустым"
-
-    # Минимальная длина
-    if len(password) < 7:
-        return False, "Пароль должен содержать минимум 7 символов"
-
-    # Проверяем допустимые символы.
-    # Разрешены:
-    # кириллица
-    # цифры
-    # специальные символы
-    #
-    # Латинские буквы здесь специально запрещены.
-    allowed_pattern = r"^[А-Яа-яЁё0-9!@#$%^&*()_\-+=.?[\]{}:;,'\"<>/\\|`~]+$"
-
-    if not re.fullmatch(allowed_pattern, password):
-        return (
-            False,
-            "Пароль может содержать только "
-            "кириллицу, цифры и специальные символы"
-        )
-
-    # Заглавная кириллическая буква
-    if not re.search(r"[А-ЯЁ]", password):
-        return (
-            False,
-            "Пароль должен содержать хотя бы одну "
-            "заглавную букву"
-        )
-
-    # Строчная кириллическая буква
-    if not re.search(r"[а-яё]", password):
-        return (
-            False,
-            "Пароль должен содержать хотя бы одну "
-            "строчную букву"
-        )
-
-    # Цифра
-    if not re.search(r"\d", password):
-        return (
-            False,
-            "Пароль должен содержать хотя бы одну цифру"
-        )
-
-    # Специальный символ
-    if not re.search(
-        r"[!@#$%^&*()_\-+=.?[\]{}:;,'\"<>/\\|`~]",
-        password
-    ):
-        return (
-            False,
-            "Пароль должен содержать хотя бы один "
-            "специальный символ"
-        )
-
-    return True, ""
-
-
-# ============================================================
-# ПРОВЕРКА РЕГИСТРАЦИИ
-# ============================================================
-
-def register_user(login, password, password_confirmation):
-    """
-    Основная функция регистрации пользователя.
-
-    Вход:
-        login
-        password
-        password_confirmation
-
-    Выход:
-        (True, "")       - регистрация успешна
-        (False, причина) - регистрация отклонена
-    """
-
-    # Маскируем пароли перед записью в лог
-    masked_password = mask_password(password)
-    masked_confirmation = mask_password(password_confirmation)
-
-    logging.info(
-        "Запрос регистрации: "
-        "login='%s', password='%s', confirmation='%s'",
-        login,
-        masked_password,
-        masked_confirmation
-    )
-
+def _parse_positive_float(value: str, name: str) -> float:
+    """Преобразует строку в положительное float."""
     try:
-        # ----------------------------------------------------
-        # Проверка логина
-        # ----------------------------------------------------
+        number = float(value)
+    except ValueError as exc:
+        # WARNING — ожидаемая ошибка валидации, без падения программы.
+        logging.warning("Нечисловое значение %s='%s'", name, value)
+        raise ValueError(f"Сторона {name} не является числом") from exc
 
-        login_valid, login_error = validate_login(login)
+    if number <= 0:
+        # WARNING — число корректное, но недопустимое по условию.
+        logging.warning("Недопустимое значение %s=%s (должно быть > 0)", name, number)
+        raise ValueError(f"Сторона {name} должна быть > 0")
 
-        if not login_valid:
-            logging.warning(
-                "Регистрация отклонена: login='%s', причина='%s'",
-                login,
-                login_error
-            )
+    # DEBUG — промежуточное состояние успешного разбора.
+    logging.debug("Параметр %s успешно преобразован: %s", name, number)
+    return number
 
-            return False, login_error
 
-        logging.debug(
-            "Логин '%s' успешно прошел проверку",
-            login
-        )
+def _triangle_type(a: float, b: float, c: float) -> str:
+    """Определяет вид треугольника по трём сторонам."""
+    if a + b <= c or a + c <= b or b + c <= a:
+        return "не треугольник"
+    if a == b == c:
+        return "равносторонний"
+    if a == b or a == c or b == c:
+        return "равнобедренный"
+    return "разносторонний"
 
-        # ----------------------------------------------------
-        # Проверка пароля
-        # ----------------------------------------------------
 
-        password_valid, password_error = validate_password(password)
+def _calculate_vertices(a: float, b: float, c: float) -> List[Tuple[int, int]]:
+    """
+    Вычисляет координаты вершин для поля 100x100.
+    Вершина C = (0,0), B = (a,0), A = (x,y).
+    """
+    # DEBUG — подробности расчёта.
+    logging.debug("Расчёт координат для сторон A=%s, B=%s, C=%s", a, b, c)
 
-        if not password_valid:
-            logging.warning(
-                "Регистрация отклонена: login='%s', причина='%s'",
-                login,
-                password_error
-            )
+    # Координаты до масштабирования.
+    x = (b * b + a * a - c * c) / (2 * a)
+    y = math.sqrt(max(0.0, b * b - x * x))
 
-            return False, password_error
+    raw_vertices = [(x, y), (a, 0.0), (0.0, 0.0)]
 
-        logging.debug(
-            "Пароль для login='%s' успешно прошел проверку",
-            login
-        )
+    # Масштабирование в поле 100x100.
+    max_x = max(v[0] for v in raw_vertices)
+    max_y = max(v[1] for v in raw_vertices)
+    min_x = min(v[0] for v in raw_vertices)
+    min_y = min(v[1] for v in raw_vertices)
 
-        # ----------------------------------------------------
-        # Проверка совпадения паролей
-        # ----------------------------------------------------
+    width = max_x - min_x
+    height = max_y - min_y
 
-        if password != password_confirmation:
-            error_message = "Пароль и подтверждение пароля не совпадают"
+    if width <= 0 or height <= 0:
+        # WARNING — для валидного треугольника такой ситуации быть не должно.
+        logging.warning("Нулевой размер треугольника: width=%s, height=%s", width, height)
+        return [(-1, -1), (-1, -1), (-1, -1)]
 
-            logging.warning(
-                "Регистрация отклонена: login='%s', причина='%s'",
-                login,
-                error_message
-            )
+    scale = min(100.0 / width, 100.0 / height)
 
-            return False, error_message
+    vertices: List[Tuple[int, int]] = []
+    for vx, vy in raw_vertices:
+        px = int(round((vx - min_x) * scale))
+        py = int(round((vy - min_y) * scale))
+        px = max(0, min(100, px))
+        py = max(0, min(100, py))
+        vertices.append((px, py))
 
-        # ----------------------------------------------------
-        # Регистрация успешно завершена
-        # ----------------------------------------------------
+    # DEBUG — итоговые координаты.
+    logging.debug("Координаты вершин после масштабирования: %s", vertices)
+    return vertices
 
-        logging.info(
-            "Регистрация успешно завершена: login='%s', "
-            "результат=True",
-            login
-        )
 
-        return True, ""
+def process_triangle(a_str: str, b_str: str, c_str: str) -> Tuple[str, List[Tuple[int, int]]]:
+    """
+    Основной метод Варианта 1.
+    Возвращает: (тип треугольника, список координат вершин).
+    """
+    # INFO — фиксируем параметры запроса.
+    logging.info("Запрос: A='%s', B='%s', C='%s'", a_str, b_str, c_str)
 
-    except Exception as ex:
-        # logging.exception() автоматически добавляет traceback
+    # 1. Проверка на нечисловые данные.
+    non_numeric = False
+    for name, value in (("A", a_str), ("B", b_str), ("C", c_str)):
+        try:
+            float(value)
+        except ValueError:
+            non_numeric = True
+            # ERROR — неуспешный запрос, нечисловые данные. exc_info=True добавляет traceback.
+            logging.exception("Неуспешный запрос: сторона %s='%s' не является числом", name, value)
+
+    if non_numeric:
+        result_type = ""
+        coords = [(-2, -2), (-2, -2), (-2, -2)]
+        # ERROR — итог неуспешного запроса.
+        logging.error("Итог неуспешного запроса: тип='%s', координаты=%s", result_type, coords)
+        return result_type, coords
+
+    # 2. Проверка на положительные числа.
+    try:
+        a = _parse_positive_float(a_str, "A")
+        b = _parse_positive_float(b_str, "B")
+        c = _parse_positive_float(c_str, "C")
+    except ValueError:
+        result_type = "не треугольник"
+        coords = [(-1, -1), (-1, -1), (-1, -1)]
+        # ERROR — числовые данные вне допустимого диапазона.
         logging.exception(
-            "Непредвиденная ошибка при регистрации "
-            "login='%s': %s",
-            login,
-            ex
+            "Неуспешный запрос: числовые данные <= 0. Итог: тип='%s', координаты=%s",
+            result_type,
+            coords
         )
+        return result_type, coords
 
-        return False, "Произошла внутренняя ошибка программы"
+    # 3. Определение вида треугольника.
+    tri_type = _triangle_type(a, b, c)
+
+    if tri_type == "не треугольник":
+        coords = [(-1, -1), (-1, -1), (-1, -1)]
+        # WARNING — данные числовые, но треугольник не существует.
+        logging.warning(
+            "Запрос обработан: треугольник не существует. Тип='%s', координаты=%s",
+            tri_type,
+            coords
+        )
+        return tri_type, coords
+
+    # 4. Расчёт координат.
+    try:
+        coords = _calculate_vertices(a, b, c)
+    except Exception:
+        # CRITICAL — непредвиденная ошибка расчёта, обязательно с traceback.
+        logging.exception("Критическая ошибка при расчёте координат")
+        return "не треугольник", [(-1, -1), (-1, -1), (-1, -1)]
+
+    # INFO — успешный запрос: параметры и результат.
+    logging.info(
+        "Успешный запрос: A=%s, B=%s, C=%s | тип='%s' | координаты=%s",
+        a, b, c, tri_type, coords
+    )
+    return tri_type, coords
 
 
-# ============================================================
-# ВЫВОД РЕЗУЛЬТАТА
-# ============================================================
-
-def print_result(result, message):
-    """
-    Вывод результата регистрации на экран.
-    """
-
-    print("\n" + "=" * 50)
-
-    if result:
-        print("Результат: True")
-        print("Сообщение: Регистрация успешно выполнена")
-    else:
-        print("Результат: False")
-        print("Сообщение:", message)
-
-    print("=" * 50)
-
-
-# ============================================================
-# ГЛАВНАЯ ТОЧКА ВХОДА
-# ============================================================
-
-def main():
-    """
-    Главная функция программы.
-    """
-
+def main() -> None:
+    """Точка входа."""
     setup_logging()
 
-    print("=" * 50)
-    print("       ПРОГРАММА РЕГИСТРАЦИИ ПОЛЬЗОВАТЕЛЯ")
-    print("=" * 50)
+    # DEBUG — подробность о начале ввода.
+    logging.debug("Ожидание ввода трёх сторон треугольника")
 
     try:
-        # ----------------------------------------------------
-        # Ввод данных
-        # ----------------------------------------------------
+        a_str = input("Введите сторону A: ")
+        b_str = input("Введите сторону B: ")
+        c_str = input("Введите сторону C: ")
+    except EOFError:
+        # ERROR — не удалось прочитать входные данные.
+        logging.exception("Ошибка ввода: не удалось прочитать три строки")
+        return
 
-        login = input("Введите логин: ")
-        password = input("Введите пароль: ")
-        password_confirmation = input(
-            "Введите подтверждение пароля: "
-        )
+    result_type, vertices = process_triangle(a_str, b_str, c_str)
 
-        # ----------------------------------------------------
-        # Регистрация
-        # ----------------------------------------------------
+    print("Тип треугольника:", result_type)
+    print("Координаты вершин:", vertices)
 
-        result, message = register_user(
-            login,
-            password,
-            password_confirmation
-        )
+    # INFO — завершение работы.
+    logging.info("Приложение завершило работу")
 
-        # ----------------------------------------------------
-        # Вывод результата
-        # ----------------------------------------------------
-
-        print_result(result, message)
-
-    except KeyboardInterrupt:
-        logging.warning(
-            "Работа программы прервана пользователем"
-        )
-
-        print("\nПрограмма завершена пользователем.")
-
-    except Exception:
-        logging.exception(
-            "Критическая ошибка в главной функции"
-        )
-
-        print(
-            "\nПроизошла критическая ошибка. "
-            "Подробности находятся в файле лога."
-        )
-
-    finally:
-        logging.info("Приложение завершено")
-
-
-# ============================================================
-# ЗАПУСК ПРОГРАММЫ
-# ============================================================
 
 if __name__ == "__main__":
     main()
